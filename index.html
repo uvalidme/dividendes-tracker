@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendrier des Dividendes - Automatique</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8 fade-in">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2 flex items-center gap-3">
+                📅 Calendrier des Dividendes <span class="text-sm bg-green-500 text-white px-3 py-1 rounded-full animate-pulse">AUTO</span>
+            </h1>
+            <p class="text-gray-600">Mise à jour automatique via API</p>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="bg-white rounded-xl shadow-lg p-8 mb-6 text-center">
+            <div class="spinner inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+            <p class="text-gray-600 mt-4">Chargement des données...</p>
+        </div>
+
+        <!-- Stats -->
+        <div id="stats" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600 mb-1">Dividendes versés (2025)</p>
+                        <p class="text-3xl font-bold text-green-600" id="totalPaid">0.00€</p>
+                        <p class="text-xs text-gray-500 mt-1">par action</p>
+                    </div>
+                    <span class="text-4xl">📈</span>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600 mb-1">Prochains dividendes</p>
+                        <p class="text-3xl font-bold text-blue-600" id="totalUpcoming">0.00€</p>
+                        <p class="text-xs text-gray-500 mt-1">par action</p>
+                    </div>
+                    <span class="text-4xl">📆</span>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600 mb-1">Actions suivies</p>
+                        <p class="text-3xl font-bold text-purple-600" id="totalCompanies">14</p>
+                        <p class="text-xs text-gray-500 mt-1">sociétés</p>
+                    </div>
+                    <span class="text-4xl">💰</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="hidden bg-white rounded-xl shadow-lg p-4 mb-6 flex flex-wrap gap-4 items-center fade-in">
+            <div class="flex-1 min-w-64">
+                <input type="text" id="search" placeholder="🔍 Rechercher..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex gap-2">
+                <button onclick="sortBy('date')" id="sortDate" class="px-4 py-2 rounded-lg bg-blue-600 text-white">Par date</button>
+                <button onclick="sortBy('amount')" id="sortAmount" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700">Par montant</button>
+                <button onclick="sortBy('company')" id="sortCompany" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700">Par société</button>
+                <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-green-600 text-white">🔄 Actualiser</button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div id="tableContainer" class="hidden bg-white rounded-xl shadow-lg overflow-hidden fade-in">
+            <table class="w-full">
+                <thead class="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                    <tr>
+                        <th class="px-6 py-4 text-left">Société</th>
+                        <th class="px-6 py-4 text-left">Ticker</th>
+                        <th class="px-6 py-4 text-left">Détachement</th>
+                        <th class="px-6 py-4 text-left">Versement</th>
+                        <th class="px-6 py-4 text-right">Montant</th>
+                        <th class="px-6 py-4 text-center">Rendement</th>
+                        <th class="px-6 py-4 text-center">Fréquence</th>
+                        <th class="px-6 py-4 text-center">Statut</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div id="footer" class="hidden mt-6 text-center text-sm text-gray-600">
+            <p>📅 Mise à jour: <span id="lastUpdate"></span></p>
+            <p class="mt-2">✅ Données chargées automatiquement</p>
+        </div>
+    </div>
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let currentSort = 'date';
+
+        async function loadData() {
+            try {
+                document.getElementById('loading').classList.remove('hidden');
+                const response = await fetch('/api/dividends');
+                const result = await response.json();
+                
+                allData = result.data;
+                filteredData = [...allData];
+                
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('stats').classList.remove('hidden');
+                document.getElementById('controls').classList.remove('hidden');
+                document.getElementById('tableContainer').classList.remove('hidden');
+                document.getElementById('footer').classList.remove('hidden');
+                
+                updateStats();
+                sortBy(currentSort);
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleString('fr-FR');
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de chargement des données');
+            }
+        }
+
+        function updateStats() {
+            const paid = allData.filter(d => d.status === 'Versé' && d.amount && d.currency === '€').reduce((sum, d) => sum + d.amount, 0);
+            const upcoming = allData.filter(d => d.status === 'Prochain' && d.amount && d.currency === '€').reduce((sum, d) => sum + d.amount, 0);
+            
+            document.getElementById('totalPaid').textContent = paid.toFixed(2) + '€';
+            document.getElementById('totalUpcoming').textContent = upcoming.toFixed(2) + '€';
+            document.getElementById('totalCompanies').textContent = allData.length;
+        }
+
+        function formatDate(date) {
+            if (date === 'N/A' || date === 'À confirmer') return date;
+            return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'Versé': 'bg-green-100 text-green-800 border-green-300',
+                'Prochain': 'bg-blue-100 text-blue-800 border-blue-300',
+                'En attente': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                'Pas de dividende': 'bg-gray-100 text-gray-800 border-gray-300'
+            };
+            return colors[status] || colors['En attente'];
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            filteredData.forEach((d, i) => {
+                const row = `
+                    <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 border-b">
+                        <td class="px-6 py-4 font-semibold">${d.company}</td>
+                        <td class="px-6 py-4"><span class="bg-gray-100 px-2 py-1 rounded text-sm font-mono">${d.ticker}</span></td>
+                        <td class="px-6 py-4 text-sm">${formatDate(d.exDate)}</td>
+                        <td class="px-6 py-4 text-sm">${formatDate(d.payDate)}</td>
+                        <td class="px-6 py-4 text-right">${d.amount ? '<span class="font-bold text-green-600">' + d.amount.toFixed(2) + d.currency + '</span>' : '<span class="text-gray-400">N/A</span>'}</td>
+                        <td class="px-6 py-4 text-center text-blue-600 font-semibold">${d.yield}</td>
+                        <td class="px-6 py-4 text-center"><span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">${d.frequency}</span></td>
+                        <td class="px-6 py-4 text-center"><span class="text-xs px-3 py-1 rounded-full border ${getStatusColor(d.status)}">${d.status}</span></td>
+                    </tr>
+                    ${d.note ? '<tr class="' + (i % 2 === 0 ? 'bg-white' : 'bg-gray-50') + '"><td colspan="8" class="px-6 py-2 text-
