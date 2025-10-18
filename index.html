@@ -3,12 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendrier Dividendes</title>
+    <title>Calendrier Dividendes - Éditable</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 p-6">
     <div class="max-w-7xl mx-auto">
-        <h1 class="text-3xl font-bold mb-6">📅 Calendrier des Dividendes</h1>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">📅 Calendrier des Dividendes</h1>
+            <button onclick="resetData()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                🔄 Réinitialiser
+            </button>
+        </div>
         
         <div id="loading" class="bg-white p-8 rounded-lg shadow text-center">
             <p>⏳ Chargement...</p>
@@ -16,15 +21,15 @@
 
         <div id="stats" style="display:none;" class="grid grid-cols-4 gap-4 mb-6">
             <div class="bg-white p-6 rounded-lg shadow">
-                <p class="text-sm text-gray-600">Dividendes versés</p>
+                <p class="text-sm text-gray-600">Versés (€)</p>
                 <p id="totalPaid" class="text-2xl font-bold text-green-600">0€</p>
             </div>
             <div class="bg-white p-6 rounded-lg shadow">
-                <p class="text-sm text-gray-600">Prochains</p>
+                <p class="text-sm text-gray-600">Prochains (€)</p>
                 <p id="totalUpcoming" class="text-2xl font-bold text-blue-600">0€</p>
             </div>
             <div class="bg-white p-6 rounded-lg shadow">
-                <p class="text-sm text-gray-600">Total annuel</p>
+                <p class="text-sm text-gray-600">Total annuel (€)</p>
                 <p id="totalAnnual" class="text-2xl font-bold text-purple-600">0€</p>
             </div>
             <div class="bg-white p-6 rounded-lg shadow">
@@ -44,6 +49,7 @@
                         <th class="px-4 py-3 text-right">Total</th>
                         <th class="px-4 py-3 text-left">Versement</th>
                         <th class="px-4 py-3 text-center">Statut</th>
+                        <th class="px-4 py-3 text-center">Action</th>
                     </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
@@ -51,24 +57,72 @@
         </div>
 
         <div id="footer" style="display:none;" class="mt-6 text-center text-sm text-gray-600">
-            <p>📅 Mise à jour: <span id="lastUpdate"></span></p>
-            <p class="text-xs mt-2">💡 Modifie data.json pour ajouter/modifier tes actions</p>
+            <p>Données sauvegardées localement</p>
+        </div>
+    </div>
+
+    <!-- Modal d'édition -->
+    <div id="editModal" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+            <h2 class="text-2xl font-bold mb-4" id="editTitle">Éditer</h2>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-semibold mb-2">Quantité d'actions</label>
+                <input type="number" id="quantityInput" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" min="0" />
+            </div>
+
+            <div id="editPreview" class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <p class="text-sm text-gray-600">Total estimé :</p>
+                <p class="text-2xl font-bold text-green-600" id="previewTotal">0€</p>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="saveEdit()" class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    ✅ Sauvegarder
+                </button>
+                <button onclick="closeModal()" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    ❌ Annuler
+                </button>
+            </div>
         </div>
     </div>
 
     <script>
+    let allData = [];
+    let filteredData = [];
+    let editingIndex = -1;
+
+    function loadDataFromStorage() {
+        const stored = localStorage.getItem('dividendesData');
+        return stored ? JSON.parse(stored) : null;
+    }
+
+    function saveDataToStorage(data) {
+        localStorage.setItem('dividendesData', JSON.stringify(data));
+    }
+
     window.addEventListener('DOMContentLoaded', function() {
         console.log('Chargement des données...');
         
         fetch('/api/dividends')
             .then(function(response) {
-                console.log('Réponse:', response.status);
                 return response.json();
             })
             .then(function(result) {
-                console.log('Données chargées:', result);
+                console.log('Données de l\'API reçues');
                 
-                var data = result.data;
+                // Charger les données de stockage local si existantes
+                const stored = loadDataFromStorage();
+                if (stored) {
+                    console.log('Utilisation des données locales');
+                    allData = stored;
+                } else {
+                    console.log('Utilisation des données de l\'API');
+                    allData = result.data;
+                    saveDataToStorage(allData);
+                }
+                
+                filteredData = allData.slice();
                 
                 // Afficher le contenu
                 document.getElementById('loading').style.display = 'none';
@@ -76,69 +130,133 @@
                 document.getElementById('content').style.display = 'block';
                 document.getElementById('footer').style.display = 'block';
                 
-                // Calculs
-                var paidEur = 0;
-                var upcomingEur = 0;
-                var annualEur = 0;
-                var companiesCount = 0;
-                
-                for (var i = 0; i < data.length; i++) {
-                    var d = data[i];
-                    var quantity = d.quantity || 0;
-                    
-                    if (quantity > 0 && d.amount && d.currency === '€') {
-                        var totalAmount = d.amount * quantity;
-                        
-                        if (d.status === 'Versé') {
-                            paidEur += totalAmount;
-                            annualEur += totalAmount;
-                        }
-                        if (d.status === 'Prochain') {
-                            upcomingEur += totalAmount;
-                            annualEur += totalAmount;
-                        }
-                        
-                        companiesCount++;
-                    }
-                }
-                
-                document.getElementById('totalPaid').textContent = paidEur.toFixed(2) + '€';
-                document.getElementById('totalUpcoming').textContent = upcomingEur.toFixed(2) + '€';
-                document.getElementById('totalAnnual').textContent = annualEur.toFixed(2) + '€';
-                document.getElementById('totalCompanies').textContent = companiesCount;
-                
-                // Table
-                var tbody = document.getElementById('tbody');
-                for (var i = 0; i < data.length; i++) {
-                    var d = data[i];
-                    var quantity = d.quantity || 0;
-                    var total = d.amount && quantity > 0 ? (d.amount * quantity).toFixed(2) : 'N/A';
-                    
-                    var statusColor = 'bg-gray-100';
-                    if (d.status === 'Versé') statusColor = 'bg-green-100 text-green-800';
-                    if (d.status === 'Prochain') statusColor = 'bg-blue-100 text-blue-800';
-                    if (d.status === 'En attente') statusColor = 'bg-yellow-100 text-yellow-800';
-                    
-                    var tr = document.createElement('tr');
-                    tr.className = 'border-b hover:bg-gray-50';
-                    tr.innerHTML = 
-                        '<td class="px-4 py-3 font-semibold">' + d.company + '</td>' +
-                        '<td class="px-4 py-3 text-sm">' + d.ticker + '</td>' +
-                        '<td class="px-4 py-3 text-center font-semibold">' + quantity + '</td>' +
-                        '<td class="px-4 py-3 text-right">' + (d.amount ? d.amount.toFixed(2) + d.currency : 'N/A') + '</td>' +
-                        '<td class="px-4 py-3 text-right font-bold">' + (total !== 'N/A' ? total + d.currency : total) + '</td>' +
-                        '<td class="px-4 py-3 text-sm">' + (d.payDate || 'N/A') + '</td>' +
-                        '<td class="px-4 py-3 text-center"><span class="px-2 py-1 rounded text-xs ' + statusColor + '">' + d.status + '</span></td>';
-                    
-                    tbody.appendChild(tr);
-                }
-                
-                document.getElementById('lastUpdate').textContent = new Date().toLocaleString('fr-FR');
+                updateStats();
+                renderTable();
             })
             .catch(function(error) {
                 console.error('ERREUR:', error);
                 document.getElementById('loading').innerHTML = '<p class="text-red-600">Erreur: ' + error.message + '</p>';
             });
+    });
+
+    function updateStats() {
+        var paidEur = 0;
+        var upcomingEur = 0;
+        var annualEur = 0;
+        var companiesCount = 0;
+        
+        for (var i = 0; i < allData.length; i++) {
+            var d = allData[i];
+            var quantity = d.quantity || 0;
+            
+            if (quantity > 0 && d.amount && d.currency === '€') {
+                var totalAmount = d.amount * quantity;
+                
+                if (d.status === 'Versé') {
+                    paidEur += totalAmount;
+                    annualEur += totalAmount;
+                }
+                if (d.status === 'Prochain') {
+                    upcomingEur += totalAmount;
+                    annualEur += totalAmount;
+                }
+                
+                companiesCount++;
+            }
+        }
+        
+        document.getElementById('totalPaid').textContent = paidEur.toFixed(2) + '€';
+        document.getElementById('totalUpcoming').textContent = upcomingEur.toFixed(2) + '€';
+        document.getElementById('totalAnnual').textContent = annualEur.toFixed(2) + '€';
+        document.getElementById('totalCompanies').textContent = companiesCount;
+    }
+
+    function renderTable() {
+        var tbody = document.getElementById('tbody');
+        tbody.innerHTML = '';
+        
+        for (var i = 0; i < allData.length; i++) {
+            var d = allData[i];
+            var quantity = d.quantity || 0;
+            var total = d.amount && quantity > 0 ? (d.amount * quantity).toFixed(2) : 'N/A';
+            
+            var statusColor = 'bg-gray-100';
+            if (d.status === 'Versé') statusColor = 'bg-green-100 text-green-800';
+            if (d.status === 'Prochain') statusColor = 'bg-blue-100 text-blue-800';
+            if (d.status === 'En attente') statusColor = 'bg-yellow-100 text-yellow-800';
+            
+            var tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50';
+            tr.innerHTML = 
+                '<td class="px-4 py-3 font-semibold">' + d.company + '</td>' +
+                '<td class="px-4 py-3 text-sm">' + d.ticker + '</td>' +
+                '<td class="px-4 py-3 text-center font-semibold">' + quantity + '</td>' +
+                '<td class="px-4 py-3 text-right">' + (d.amount ? d.amount.toFixed(2) + d.currency : 'N/A') + '</td>' +
+                '<td class="px-4 py-3 text-right font-bold">' + (total !== 'N/A' ? total + d.currency : total) + '</td>' +
+                '<td class="px-4 py-3 text-sm">' + (d.payDate || 'N/A') + '</td>' +
+                '<td class="px-4 py-3 text-center"><span class="px-2 py-1 rounded text-xs ' + statusColor + '">' + d.status + '</span></td>' +
+                '<td class="px-4 py-3 text-center"><button onclick="openEditModal(' + i + ')" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">✏️ Éditer</button></td>';
+            
+            tbody.appendChild(tr);
+        }
+    }
+
+    function openEditModal(index) {
+        editingIndex = index;
+        var d = allData[index];
+        
+        document.getElementById('editTitle').textContent = 'Éditer: ' + d.company;
+        document.getElementById('quantityInput').value = d.quantity || 0;
+        
+        updatePreview();
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('editModal').style.display = 'none';
+        editingIndex = -1;
+    }
+
+    function updatePreview() {
+        if (editingIndex < 0) return;
+        
+        var quantity = parseInt(document.getElementById('quantityInput').value) || 0;
+        var d = allData[editingIndex];
+        var total = d.amount && quantity > 0 ? (d.amount * quantity) : 0;
+        
+        document.getElementById('previewTotal').textContent = total.toFixed(2) + d.currency;
+    }
+
+    function saveEdit() {
+        if (editingIndex < 0) return;
+        
+        var quantity = parseInt(document.getElementById('quantityInput').value) || 0;
+        allData[editingIndex].quantity = quantity;
+        
+        saveDataToStorage(allData);
+        updateStats();
+        renderTable();
+        closeModal();
+    }
+
+    function resetData() {
+        if (confirm('Êtes-vous sûr de vouloir réinitialiser toutes les quantités à 0 ?')) {
+            for (var i = 0; i < allData.length; i++) {
+                allData[i].quantity = 0;
+            }
+            saveDataToStorage(allData);
+            updateStats();
+            renderTable();
+        }
+    }
+
+    document.getElementById('quantityInput').addEventListener('input', updatePreview);
+    
+    // Fermer la modal en cliquant en dehors
+    document.getElementById('editModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
     });
     </script>
 </body>
