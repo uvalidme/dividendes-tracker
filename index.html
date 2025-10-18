@@ -10,9 +10,14 @@
     <div class="max-w-7xl mx-auto">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold">📅 Calendrier des Dividendes</h1>
-            <button onclick="resetData()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-                🔄 Réinitialiser
-            </button>
+            <div class="flex gap-2">
+                <button onclick="openAddModal()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    ➕ Ajouter une action
+                </button>
+                <button onclick="resetData()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                    🔄 Réinitialiser
+                </button>
+            </div>
         </div>
         
         <div id="loading" class="bg-white p-8 rounded-lg shadow text-center">
@@ -61,8 +66,8 @@
         </div>
     </div>
 
-    <!-- Modal d'édition -->
-    <div id="editModal" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <!-- Modal d'édition quantité -->
+    <div id="editModal" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
             <h2 class="text-2xl font-bold mb-4" id="editTitle">Éditer</h2>
             
@@ -80,7 +85,65 @@
                 <button onclick="saveEdit()" class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                     ✅ Sauvegarder
                 </button>
-                <button onclick="closeModal()" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                <button onclick="closeEditModal()" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    ❌ Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'ajout -->
+    <div id="addModal" style="display:none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Ajouter une action</h2>
+            
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Société *</label>
+                <input type="text" id="addCompany" placeholder="Ex: Tesla" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Ticker *</label>
+                <input type="text" id="addTicker" placeholder="Ex: TSLA" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Montant/action *</label>
+                <input type="number" id="addAmount" placeholder="0.00" step="0.01" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Devise</label>
+                <select id="addCurrency" class="w-full px-4 py-2 border rounded-lg">
+                    <option value="€">€ Euro</option>
+                    <option value="$">$ Dollar</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Quantité</label>
+                <input type="number" id="addQuantity" placeholder="0" min="0" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Date de versement</label>
+                <input type="date" id="addPayDate" class="w-full px-4 py-2 border rounded-lg" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Statut</label>
+                <select id="addStatus" class="w-full px-4 py-2 border rounded-lg">
+                    <option value="Prochain">Prochain</option>
+                    <option value="Versé">Versé</option>
+                    <option value="En attente">En attente</option>
+                </select>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="saveAdd()" class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    ✅ Ajouter
+                </button>
+                <button onclick="closeAddModal()" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
                     ❌ Annuler
                 </button>
             </div>
@@ -102,29 +165,13 @@
     }
 
     window.addEventListener('DOMContentLoaded', function() {
-        console.log('Chargement des données...');
-        
         fetch('/api/dividends')
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                console.log('Données de l\'API reçues');
-                
-                // Charger les données de stockage local si existantes
+            .then(r => r.json())
+            .then(result => {
                 const stored = loadDataFromStorage();
-                if (stored) {
-                    console.log('Utilisation des données locales');
-                    allData = stored;
-                } else {
-                    console.log('Utilisation des données de l\'API');
-                    allData = result.data;
-                    saveDataToStorage(allData);
-                }
-                
+                allData = stored || result.data;
                 filteredData = allData.slice();
                 
-                // Afficher le contenu
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('stats').style.display = 'grid';
                 document.getElementById('content').style.display = 'block';
@@ -133,117 +180,150 @@
                 updateStats();
                 renderTable();
             })
-            .catch(function(error) {
-                console.error('ERREUR:', error);
-                document.getElementById('loading').innerHTML = '<p class="text-red-600">Erreur: ' + error.message + '</p>';
+            .catch(e => {
+                document.getElementById('loading').innerHTML = '<p class="text-red-600">Erreur: ' + e.message + '</p>';
             });
     });
 
     function updateStats() {
-        var paidEur = 0;
-        var upcomingEur = 0;
-        var annualEur = 0;
-        var companiesCount = 0;
+        let paidEur = 0, upcomingEur = 0, annualEur = 0, count = 0;
         
-        for (var i = 0; i < allData.length; i++) {
-            var d = allData[i];
-            var quantity = d.quantity || 0;
-            
-            if (quantity > 0 && d.amount && d.currency === '€') {
-                var totalAmount = d.amount * quantity;
-                
-                if (d.status === 'Versé') {
-                    paidEur += totalAmount;
-                    annualEur += totalAmount;
-                }
-                if (d.status === 'Prochain') {
-                    upcomingEur += totalAmount;
-                    annualEur += totalAmount;
-                }
-                
-                companiesCount++;
+        for (let d of allData) {
+            const qty = d.quantity || 0;
+            if (qty > 0 && d.amount && d.currency === '€') {
+                const total = d.amount * qty;
+                if (d.status === 'Versé') { paidEur += total; annualEur += total; }
+                if (d.status === 'Prochain') { upcomingEur += total; annualEur += total; }
+                count++;
             }
         }
         
         document.getElementById('totalPaid').textContent = paidEur.toFixed(2) + '€';
         document.getElementById('totalUpcoming').textContent = upcomingEur.toFixed(2) + '€';
         document.getElementById('totalAnnual').textContent = annualEur.toFixed(2) + '€';
-        document.getElementById('totalCompanies').textContent = companiesCount;
+        document.getElementById('totalCompanies').textContent = count;
     }
 
     function renderTable() {
-        var tbody = document.getElementById('tbody');
+        const tbody = document.getElementById('tbody');
         tbody.innerHTML = '';
         
-        for (var i = 0; i < allData.length; i++) {
-            var d = allData[i];
-            var quantity = d.quantity || 0;
-            var total = d.amount && quantity > 0 ? (d.amount * quantity).toFixed(2) : 'N/A';
+        for (let i = 0; i < allData.length; i++) {
+            const d = allData[i];
+            const qty = d.quantity || 0;
+            const total = d.amount && qty > 0 ? (d.amount * qty).toFixed(2) : 'N/A';
             
-            var statusColor = 'bg-gray-100';
+            let statusColor = 'bg-gray-100';
             if (d.status === 'Versé') statusColor = 'bg-green-100 text-green-800';
             if (d.status === 'Prochain') statusColor = 'bg-blue-100 text-blue-800';
             if (d.status === 'En attente') statusColor = 'bg-yellow-100 text-yellow-800';
             
-            var tr = document.createElement('tr');
+            const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
-            tr.innerHTML = 
-                '<td class="px-4 py-3 font-semibold">' + d.company + '</td>' +
-                '<td class="px-4 py-3 text-sm">' + d.ticker + '</td>' +
-                '<td class="px-4 py-3 text-center font-semibold">' + quantity + '</td>' +
-                '<td class="px-4 py-3 text-right">' + (d.amount ? d.amount.toFixed(2) + d.currency : 'N/A') + '</td>' +
-                '<td class="px-4 py-3 text-right font-bold">' + (total !== 'N/A' ? total + d.currency : total) + '</td>' +
-                '<td class="px-4 py-3 text-sm">' + (d.payDate || 'N/A') + '</td>' +
-                '<td class="px-4 py-3 text-center"><span class="px-2 py-1 rounded text-xs ' + statusColor + '">' + d.status + '</span></td>' +
-                '<td class="px-4 py-3 text-center"><button onclick="openEditModal(' + i + ')" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">✏️ Éditer</button></td>';
-            
+            tr.innerHTML = `
+                <td class="px-4 py-3 font-semibold">${d.company}</td>
+                <td class="px-4 py-3 text-sm">${d.ticker}</td>
+                <td class="px-4 py-3 text-center font-semibold">${qty}</td>
+                <td class="px-4 py-3 text-right">${d.amount ? d.amount.toFixed(2) + d.currency : 'N/A'}</td>
+                <td class="px-4 py-3 text-right font-bold">${total !== 'N/A' ? total + d.currency : total}</td>
+                <td class="px-4 py-3 text-sm">${d.payDate || 'N/A'}</td>
+                <td class="px-4 py-3 text-center"><span class="px-2 py-1 rounded text-xs ${statusColor}">${d.status}</span></td>
+                <td class="px-4 py-3 text-center flex gap-1 justify-center">
+                    <button onclick="openEditModal(${i})" class="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 text-sm">✏️</button>
+                    <button onclick="deleteAction(${i})" class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 text-sm">🗑️</button>
+                </td>
+            `;
             tbody.appendChild(tr);
         }
     }
 
-    function openEditModal(index) {
-        editingIndex = index;
-        var d = allData[index];
-        
+    function openEditModal(i) {
+        editingIndex = i;
+        const d = allData[i];
         document.getElementById('editTitle').textContent = 'Éditer: ' + d.company;
         document.getElementById('quantityInput').value = d.quantity || 0;
-        
         updatePreview();
         document.getElementById('editModal').style.display = 'flex';
     }
 
-    function closeModal() {
+    function closeEditModal() {
         document.getElementById('editModal').style.display = 'none';
         editingIndex = -1;
     }
 
     function updatePreview() {
         if (editingIndex < 0) return;
-        
-        var quantity = parseInt(document.getElementById('quantityInput').value) || 0;
-        var d = allData[editingIndex];
-        var total = d.amount && quantity > 0 ? (d.amount * quantity) : 0;
-        
+        const qty = parseInt(document.getElementById('quantityInput').value) || 0;
+        const d = allData[editingIndex];
+        const total = d.amount && qty > 0 ? (d.amount * qty) : 0;
         document.getElementById('previewTotal').textContent = total.toFixed(2) + d.currency;
     }
 
     function saveEdit() {
-        if (editingIndex < 0) return;
-        
-        var quantity = parseInt(document.getElementById('quantityInput').value) || 0;
-        allData[editingIndex].quantity = quantity;
-        
+        const qty = parseInt(document.getElementById('quantityInput').value) || 0;
+        allData[editingIndex].quantity = qty;
         saveDataToStorage(allData);
         updateStats();
         renderTable();
-        closeModal();
+        closeEditModal();
+    }
+
+    function openAddModal() {
+        document.getElementById('addCompany').value = '';
+        document.getElementById('addTicker').value = '';
+        document.getElementById('addAmount').value = '';
+        document.getElementById('addQuantity').value = '0';
+        document.getElementById('addPayDate').value = '';
+        document.getElementById('addCurrency').value = '€';
+        document.getElementById('addStatus').value = 'Prochain';
+        document.getElementById('addModal').style.display = 'flex';
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+    }
+
+    function saveAdd() {
+        const company = document.getElementById('addCompany').value.trim();
+        const ticker = document.getElementById('addTicker').value.trim();
+        const amount = parseFloat(document.getElementById('addAmount').value);
+        const currency = document.getElementById('addCurrency').value;
+        const quantity = parseInt(document.getElementById('addQuantity').value) || 0;
+        const payDate = document.getElementById('addPayDate').value;
+        const status = document.getElementById('addStatus').value;
+
+        if (!company || !ticker || !amount) {
+            alert('Remplis tous les champs obligatoires (*)');
+            return;
+        }
+
+        const newAction = {
+            company, ticker, amount, currency, quantity, payDate, status,
+            exDate: payDate,
+            yield: 'N/A',
+            frequency: 'Annuel',
+            note: 'Ajouté manuellement'
+        };
+
+        allData.push(newAction);
+        saveDataToStorage(allData);
+        updateStats();
+        renderTable();
+        closeAddModal();
+    }
+
+    function deleteAction(i) {
+        if (confirm('Supprimer ' + allData[i].company + ' ?')) {
+            allData.splice(i, 1);
+            saveDataToStorage(allData);
+            updateStats();
+            renderTable();
+        }
     }
 
     function resetData() {
-        if (confirm('Êtes-vous sûr de vouloir réinitialiser toutes les quantités à 0 ?')) {
-            for (var i = 0; i < allData.length; i++) {
-                allData[i].quantity = 0;
-            }
+        if (confirm('Réinitialiser toutes les quantités à 0 ?')) {
+            allData.forEach(d => d.quantity = 0);
             saveDataToStorage(allData);
             updateStats();
             renderTable();
@@ -251,13 +331,8 @@
     }
 
     document.getElementById('quantityInput').addEventListener('input', updatePreview);
-    
-    // Fermer la modal en cliquant en dehors
-    document.getElementById('editModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeModal();
-        }
-    });
+    document.getElementById('addModal').addEventListener('click', e => { if (e.target.id === 'addModal') closeAddModal(); });
+    document.getElementById('editModal').addEventListener('click', e => { if (e.target.id === 'editModal') closeEditModal(); });
     </script>
 </body>
 </html>
